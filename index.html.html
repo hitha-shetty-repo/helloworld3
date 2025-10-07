@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sticky Notes Pro</title>
+<link href="https://fonts.googleapis.com/css2?family=Caveat&family=Patrick+Hand&display=swap" rel="stylesheet">
+<style>
+
+body {
+
+  font-family: 'Patrick Hand', cursive;
+
+  background: linear-gradient(to right, #fef9f9, #e0f7fa);
+
+  margin: 0;
+
+  padding: 20px;
+
+}
+
+h1 {
+
+  text-align: center;
+
+  color: #333;
+
+  margin-bottom: 10px;
+
+  text-shadow: 1px 1px 2px rgba(0,0,0,0.2);
+
+}
+
+#controls {
+
+  text-align: center;
+
+  margin-bottom: 15px;
+
+}
+
+button {
+
+  margin: 5px;
+
+  padding: 10px 15px;
+
+  font-size: 14px;
+
+  cursor: pointer;
+
+  border: none;
+
+  border-radius: 8px;
+
+  transition: 0.2s;
+
+}
+
+button:hover { transform: scale(1.05); }
+
+#addNoteBtn { background: #ffeb3b; }
+
+#clearAllBtn { background: #f44336; color: white; }
+
+#exportBtn { background: #4caf50; color: white; }
+
+#importBtn { background: #2196f3; color: white; }
+
+#undoBtn { background: #ff9800; color: white; }
+
+#searchInput {
+
+  padding: 8px;
+
+  font-size: 14px;
+
+  border-radius: 5px;
+
+  border: 1px solid #ccc;
+
+  width: 200px;
+
+  margin-left: 10px;
+
+}
+
+#notesContainer { position: relative; height: 80vh; }
+
+.note {
+
+  position: absolute;
+
+  width: 200px;
+
+  min-height: 200px;
+
+  padding: 10px;
+
+  box-shadow: 2px 5px 15px rgba(0,0,0,0.2);
+
+  border-radius: 12px;
+
+  display: flex;
+
+  flex-direction: column;
+
+  resize: both;
+
+  overflow: auto;
+
+  cursor: move;
+
+  transition: transform 0.2s, box-shadow 0.2s, background 0.3s;
+
+}
+
+.note:hover {
+
+  transform: scale(1.03);
+
+  box-shadow: 3px 7px 20px rgba(0,0,0,0.3);
+
+}
+
+.note textarea {
+
+  flex: 1;
+
+  width: 100%;
+
+  border: none;
+
+  background: transparent;
+
+  resize: none;
+
+  font-size: 16px;
+
+  font-family: inherit;
+
+  outline: none;
+
+  color: #333;
+
+  margin-bottom: 5px;
+
+}
+
+.deleteBtn, .pinBtn, .collapseBtn {
+
+  position: absolute;
+
+  top: 5px;
+
+  border: none;
+
+  border-radius: 3px;
+
+  cursor: pointer;
+
+  padding: 2px 6px;
+
+  font-size: 12px;
+
+}
+
+.deleteBtn { right: 5px; background: #f44336; color: white; }
+
+.pinBtn { right: 30px; background: #ff9800; color: white; }
+
+.collapseBtn { right: 55px; background: #2196f3; color: white; }
+
+.colorPalette {
+
+  position: absolute;
+
+  bottom: 5px;
+
+  right: 5px;
+
+  display: flex;
+
+  gap: 3px;
+
+}
+
+.colorOption {
+
+  width: 20px;
+
+  height: 20px;
+
+  border-radius: 3px;
+
+  cursor: pointer;
+
+  border: 1px solid #ccc;
+
+}
+
+.labelBar { display: flex; gap: 5px; margin-bottom: 5px; }
+
+.label { cursor: pointer; font-size: 18px; }
+
+.selectedLabel { transform: scale(1.2); }
+
+.timestamp { font-size: 10px; color: #555; margin-bottom: 5px; }
+</style>
+</head>
+<body>
+ 
+<h1>Sticky Notes Pro</h1>
+<div id="controls">
+<button id="addNoteBtn">Add Note</button>
+<button id="clearAllBtn">Clear All</button>
+<button id="undoBtn">Undo Delete</button>
+<button id="exportBtn">Export Notes</button>
+<button id="importBtn">Import Notes</button>
+<input type="file" id="importFile" style="display:none;">
+<input type="text" id="searchInput" placeholder="Search notes...">
+</div>
+<div id="notesContainer"></div>
+ 
+<script>
+
+const addNoteBtn = document.getElementById('addNoteBtn');
+
+const clearAllBtn = document.getElementById('clearAllBtn');
+
+const undoBtn = document.getElementById('undoBtn');
+
+const exportBtn = document.getElementById('exportBtn');
+
+const importBtn = document.getElementById('importBtn');
+
+const importFile = document.getElementById('importFile');
+
+const notesContainer = document.getElementById('notesContainer');
+
+const searchInput = document.getElementById('searchInput');
+ 
+const pastelColors = ['#fff59d','#ffccbc','#b2dfdb','#c5cae9','#f8bbd0','#ffe082'];
+
+const labelIcons = ['🚨','💡','✅','📝'];
+ 
+let notes = JSON.parse(localStorage.getItem('stickyNotes') || '[]');
+
+let lastDeleted = null;
+ 
+function saveNotes() { localStorage.setItem('stickyNotes', JSON.stringify(notes)); }
+
+function randomRotation() { return (Math.random() * 4 - 2) + 'deg'; }
+ 
+function createNote({id = Date.now(), content = '', top = 50, left = 50, width = 200, height = 200, color = pastelColors[Math.floor(Math.random()*pastelColors.length)], label = '', pinned=false, timestamp = new Date().toLocaleString(), collapsed=false} = {}) {
+
+  const note = document.createElement('div');
+
+  note.classList.add('note');
+
+  note.style.top = top + 'px';
+
+  note.style.left = left + 'px';
+
+  note.style.width = width + 'px';
+
+  note.style.height = height + 'px';
+
+  note.style.background = color;
+
+  note.style.transform = `rotate(${randomRotation()})`;
+
+  note.dataset.id = id;
+ 
+  // Timestamp
+
+  const ts = document.createElement('div');
+
+  ts.classList.add('timestamp');
+
+  ts.innerText = timestamp;
+
+  note.appendChild(ts);
+ 
+  // Labels
+
+  const labelBar = document.createElement('div');
+
+  labelBar.classList.add('labelBar');
+
+  labelIcons.forEach(icon => {
+
+    const lbl = document.createElement('span');
+
+    lbl.classList.add('label');
+
+    lbl.innerText = icon;
+
+    if(icon===label) lbl.classList.add('selectedLabel');
+
+    lbl.addEventListener('click', () => {
+
+      note.querySelectorAll('.label').forEach(l=>l.classList.remove('selectedLabel'));
+
+      lbl.classList.add('selectedLabel');
+
+      const index = notes.findIndex(n=>n.id===id);
+
+      notes[index].label = icon;
+
+      saveNotes();
+
+    });
+
+    labelBar.appendChild(lbl);
+
+  });
+
+  note.appendChild(labelBar);
+ 
+  // Text area
+
+  const textarea = document.createElement('textarea');
+
+  textarea.value = content;
+
+  textarea.addEventListener('input', ()=>{ const index = notes.findIndex(n=>n.id===id); notes[index].content=textarea.value; saveNotes(); });
+
+  note.appendChild(textarea);
+ 
+  // Buttons
+
+  const deleteBtn = document.createElement('button'); deleteBtn.classList.add('deleteBtn'); deleteBtn.innerText='×';
+
+  deleteBtn.addEventListener('click', ()=>{
+
+    lastDeleted = notes.find(n=>n.id===id);
+
+    notes = notes.filter(n=>n.id!==id);
+
+    saveNotes();
+
+    note.remove();
+
+  });
+
+  const pinBtn = document.createElement('button'); pinBtn.classList.add('pinBtn'); pinBtn.innerText='📌';
+
+  pinBtn.addEventListener('click', ()=>{
+
+    const index = notes.findIndex(n=>n.id===id);
+
+    notes[index].pinned = !notes[index].pinned;
+
+    if(notes[index].pinned) note.style.zIndex = Date.now(); else note.style.zIndex = 'auto';
+
+    saveNotes();
+
+  });
+
+  const collapseBtn = document.createElement('button'); collapseBtn.classList.add('collapseBtn'); collapseBtn.innerText = '🗕';
+
+  collapseBtn.addEventListener('click', ()=>{
+
+    const index = notes.findIndex(n=>n.id===id);
+
+    notes[index].collapsed = !notes[index].collapsed;
+
+    if(notes[index].collapsed){
+
+      textarea.style.display='none';
+
+      labelBar.style.display='none';
+
+      colorPalette.style.display='none';
+
+      ts.style.display='none';
+
+    } else {
+
+      textarea.style.display='block';
+
+      labelBar.style.display='flex';
+
+      colorPalette.style.display='flex';
+
+      ts.style.display='block';
+
+    }
+
+    saveNotes();
+
+  });
+
+  note.appendChild(deleteBtn); note.appendChild(pinBtn); note.appendChild(collapseBtn);
+ 
+  // Color palette
+
+  const colorPalette = document.createElement('div'); colorPalette.classList.add('colorPalette');
+
+  pastelColors.forEach(c=>{
+
+    const option = document.createElement('div'); option.classList.add('colorOption'); option.style.background=c;
+
+    option.addEventListener('click', ()=>{
+
+      note.style.background=c; const index=notes.findIndex(n=>n.id===id); notes[index].color=c; saveNotes();
+
+    });
+
+    colorPalette.appendChild(option);
+
+  });
+
+  note.appendChild(colorPalette);
+ 
+  if(collapsed){ textarea.style.display='none'; labelBar.style.display='none'; colorPalette.style.display='none'; ts.style.display='none'; }
+ 
+  // Drag functionality
+
+  let offsetX, offsetY, isDragging=false;
+
+  note.addEventListener('mousedown', (e)=>{
+
+    if(!['TEXTAREA','BUTTON','DIV'].includes(e.target.tagName) || e.target.classList.contains('note')){
+
+      isDragging=true; offsetX=e.clientX-note.offsetLeft; offsetY=e.clientY-note.offsetTop; note.style.zIndex=Date.now();
+
+    }
+
+  });
+
+  document.addEventListener('mousemove', e=>{ if(isDragging){ note.style.left=(e.clientX-offsetX)+'px'; note.style.top=(e.clientY-offsetY)+'px'; } });
+
+  document.addEventListener('mouseup', ()=>{
+
+    if(isDragging){
+
+      isDragging=false; const index=notes.findIndex(n=>n.id===id);
+
+      notes[index].top=parseInt(note.style.top); notes[index].left=parseInt(note.style.left);
+
+      notes[index].width=note.offsetWidth; notes[index].height=note.offsetHeight; saveNotes();
+
+    }
+
+  });
+ 
+  new ResizeObserver(()=>{ const index=notes.findIndex(n=>n.id===id); notes[index].width=note.offsetWidth; notes[index].height=note.offsetHeight; saveNotes(); }).observe(note);
+ 
+  notesContainer.appendChild(note);
+
+}
+ 
+// Render existing notes
+
+notes.forEach(n=>createNote(n));
+ 
+addNoteBtn.addEventListener('click', ()=>{
+
+  const newNote={id:Date.now(), content:'', top:50, left:50, width:200, height:200, color: pastelColors[Math.floor(Math.random()*pastelColors.length)], label:'', pinned:false, timestamp:new Date().toLocaleString(), collapsed:false};
+
+  notes.push(newNote); createNote(newNote); saveNotes();
+
+});
+ 
+clearAllBtn.addEventListener('click', ()=>{
+
+  if(confirm('Delete all notes?')){ notes=[]; saveNotes(); notesContainer.innerHTML=''; lastDeleted=null; }
+
+});
+ 
+undoBtn.addEventListener('click', ()=>{
+
+  if(lastDeleted){ notes.push(lastDeleted); createNote(lastDeleted); saveNotes(); lastDeleted=null; }
+
+});
+ 
+exportBtn.addEventListener('click', ()=>{
+
+  const dataStr
+
+```
+
+ 
